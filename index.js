@@ -7,6 +7,31 @@ const app = express();
 app.use(cors());
 
 // ==========================================
+// 0. Startseite / Statusseite
+// ==========================================
+app.get('/', (req, res) => {
+  res.send(`
+    <html>
+      <head>
+        <title>mHub Add-on Status</title>
+        <style>
+          body { font-family: sans-serif; background: #121212; color: #fff; text-align: center; padding-top: 50px; }
+          a { color: #00d2ff; text-decoration: none; font-weight: bold; }
+          .card { background: #1e1e1e; display: inline-block; padding: 30px; border-radius: 10px; border: 1px solid #333; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>🚀 mHub Add-on ist online!</h1>
+          <p>Füge folgende URL in deine mHub-App ein:</p>
+          <p><a href="/manifest.json" target="_blank">https://mhub-addon.onrender.com/manifest.json</a></p>
+        </div>
+      </body>
+    </html>
+  `);
+});
+
+// ==========================================
 // 1. Manifest (Startseite + Suche)
 // ==========================================
 const manifest = {
@@ -42,7 +67,7 @@ app.get('/manifest.json', (req, res) => {
 function handleCatalog(req, res) {
   const { type, id, extra } = req.params;
 
-  // Fall A: Die Suche wurde benutzt
+  // Fall A: Suche
   if (extra && extra.startsWith('search=')) {
     const searchQuery = decodeURIComponent(extra.split('=')[1]);
     console.log(`[mHub] Suche nach: "${searchQuery}"`);
@@ -60,7 +85,7 @@ function handleCatalog(req, res) {
     return res.json({ metas: mockResults });
   }
 
-  // Fall B: "Angesagte Serien" direkt auf der Startseite
+  // Fall B: "Angesagte Serien" auf der Startseite
   if (id === 'custom_trending') {
     console.log(`[mHub] Laden der Angesagten Serien für die Startseite`);
 
@@ -105,7 +130,6 @@ app.get('/meta/:type/:id.json', (req, res) => {
   const { type, id } = req.params;
   console.log(`[mHub] Meta-Details angefordert für ID: ${id}`);
 
-  // Serienname aus der ID formatieren
   const seriesName = id.replace('custom_', '').replace(/_/g, ' ');
 
   const videos = [
@@ -141,7 +165,7 @@ app.get('/meta/:type/:id.json', (req, res) => {
 });
 
 // ==========================================
-// 4. Streams (Video-Links beim Abspielen)
+// 4. Streams (Video-Links)
 // ==========================================
 app.get('/stream/:type/:id.json', (req, res) => {
   const { type, id } = req.params;
