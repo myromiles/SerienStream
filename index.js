@@ -17,17 +17,17 @@ const HTTP_HEADERS = {
 // 0. Statusseite
 // ==========================================
 app.get('/', (req, res) => {
-  res.send(`<h1>🚀 mHub Scraper Server (v1.0.4) ist bereit!</h1><p>Manifest: <a href="/manifest.json">/manifest.json</a></p>`);
+  res.send(`<h1>🚀 mHub Scraper Server (v1.0.5) ist bereit!</h1><p>Manifest: <a href="/manifest.json">/manifest.json</a></p>`);
 });
 
 // ==========================================
-// 1. Manifest (Neue ID zwingt Stremio zum Cache-Clear)
+// 1. Manifest
 // ==========================================
 const manifest = {
   "id": "org.mhub.customaddon",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "name": "SerienStream Live Addon",
-  "description": "Live Scraper für Serien",
+  "description": "Live Scraper für SerienStream",
   "resources": ["catalog", "meta", "stream"],
   "types": ["series"],
   "idPrefixes": ["custom_"],
@@ -43,50 +43,58 @@ const manifest = {
 app.get('/manifest.json', (req, res) => res.json(manifest));
 
 // ==========================================
-// 2. Katalog Handler (Live Scraping)
+// 2. Live Scraper für das übergebene HTML-Format
 // ==========================================
 app.get('/catalog/:type/:id.json', async (req, res) => {
-  const { id } = req.params;
-  console.log(`[Catalog Request] Empfangen für ID: ${id}`);
+  console.log(`[Catalog Request] Starte Live-Scraping von ${BASE_URL}/beliebte-serien`);
 
   try {
-    // Anfrage an die Zielseite senden
     const response = await axios.get(`${BASE_URL}/beliebte-serien`, { 
       headers: HTTP_HEADERS,
-      timeout: 5000 
+      timeout: 8000 
     });
 
     const $ = cheerio.load(response.data);
     const metas = [];
 
-    // Links & Covers auslesen
-    $('a[href^="/serie/"]').each((i, el) => {
+    // Alle Links zu Serien durchsuchen
+    $('a[href*="/serie/"]').each((i, el) => {
       const link = $(el).attr('href');
-      const title = $(el).attr('title') || $(el).find('h3').text().trim() \vert{}\vert{}$(el).text().trim();
-      let poster = $(el).find('img').attr('data-src') \vert{}\vert{}$(el).find('img').attr('src');
+      const img = $(el).find('img');
 
-      if (link && title && metas.length < 20) {
-        const slug = link.replace('/serie/stream/', '').replace('/serie/', '');
-        
-        if (poster && !poster.startsWith('http')) {
+      // Titel aus alt-Attribut oder Fallback holen
+      const title = img.attr('alt') || $(el).attr('title') \vert{}\vert{}$(el).text().trim();
+      
+      // Bildpfad aus src oder srcset auslesen
+      let poster = img.attr('src') || (img.attr('srcset') ? img.attr('srcset').split(' ')[0] : null);
+
+      if (link && title && poster && metas.length < 30) {
+        // Slug säubern (z. B. /serie/stream/american-hostage -> american-hostage)
+        const slug = link.replace('/serie/stream/', '').replace('/serie/', '').replace(/^\//, '');
+
+        // Relativen Pfad (/media/images/...) zur vollständigen URL zusammensetzen
+        if (poster.startsWith('/')) {
           poster = `${BASE_URL}${poster}`;
         }
 
+        // Duplikate filtern
         if (slug && !metas.some(m => m.id === `custom_${slug}`)) {
           metas.push({
             id: `custom_${slug}`,
             type: "series",
-            name: title,
-            poster: poster || "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=500&q=80",
+            name: title.trim(),
+            poster: poster.trim(),
             posterShape: "poster",
-            description: `Live von SerienStream`
+            description: `Live von SerienStream: ${title.trim()}`
           });
         }
       }
     });
 
+    console.log(`[Scraper Success] ${metas.length} Serien erfolgreich gecrapt!`);
+
     if (metas.length === 0) {
-      throw new Error("Keine Serien im HTML gefunden (Struktur geändert oder Bot-Blockade)");
+      throw new Error("Keine Serien im HTML gefunden.");
     }
 
     return res.json({ metas });
@@ -94,7 +102,6 @@ app.get('/catalog/:type/:id.json', async (req, res) => {
   } catch (error) {
     console.error('[Scraper Fehler]:', error.message);
 
-    // Zeige eine sichtbare Fehler-Karte in Stremio/mHub an
     return res.json({
       metas: [
         {
@@ -103,14 +110,13 @@ app.get('/catalog/:type/:id.json', async (req, res) => {
           name: "⚠️ Scraping-Fehler",
           poster: "https://via.placeholder.com/250x350/ff0000/ffffff?text=Blockiert",
           posterShape: "poster",
-          description: `Grund: ${error.message}. Render-Server werden oft von Cloudflare blockiert.`
+          description: `Grund: ${error.message}`
         }
       ]
     });
   }
 });
 
-// Fallback für optionale Parameter
 app.get('/catalog/:type/:id/:extra.json', (req, res) => {
   res.redirect(`/catalog/${req.params.type}/${req.params.id}.json`);
 });
