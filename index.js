@@ -62,7 +62,7 @@ app.get('/catalog/:type/:id.json', async (req, res) => {
       const link = $(el).attr('href');
       const img = $(el).find('img');
 
-      // Titel aus alt-Attribut oder Fallback holen (saubere Oder-Verknüpfung)
+      // Titel aus alt-Attribut oder Fallback holen
       const title = img.attr('alt') || $(el).attr('title') \vert{}\vert{}$(el).text().trim();
       
       // Bildpfad aus src oder srcset auslesen
