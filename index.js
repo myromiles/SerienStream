@@ -1,17 +1,26 @@
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios');
+const cheerio = require('cheerio');
 
 const app = express();
 app.use(cors());
 
+// Basis-URL der Zielseite & Standard-Header (gegen Bot-Sperren)
+const BASE_URL = 'https://serienstream.to';
+const HTTP_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept-Language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7'
+};
+
 // ==========================================
-// 0. Status-Startseite
+// 0. Statusseite
 // ==========================================
 app.get('/', (req, res) => {
   res.send(`
     <html>
       <head>
-        <title>mHub Add-on Status</title>
+        <title>mHub SerienStream Scraper</title>
         <style>
           body { font-family: sans-serif; background: #121212; color: #fff; text-align: center; padding-top: 50px; }
           a { color: #00d2ff; text-decoration: none; font-weight: bold; }
@@ -20,7 +29,7 @@ app.get('/', (req, res) => {
       </head>
       <body>
         <div class="card">
-          <h1>🚀 mHub Add-on (v1.0.2) ist online!</h1>
+          <h1>🚀 mHub Live Scraper (v1.0.3) ist online!</h1>
           <p>Manifest-URL für Stremio / mHub:</p>
           <p><a href="/manifest.json" target="_blank">https://mhub-addon.onrender.com/manifest.json</a></p>
         </div>
@@ -34,17 +43,17 @@ app.get('/', (req, res) => {
 // ==========================================
 const manifest = {
   "id": "org.mhub.customaddon",
-  "version": "1.0.2",
-  "name": "mHub Custom Addon",
-  "description": "mHub v2 Add-on mit Angesagten Serien",
+  "version": "1.0.3",
+  "name": "SerienStream Live Addon",
+  "description": "Live Scraper für Serien & Streams",
   "resources": ["catalog", "meta", "stream"],
-  "types": ["series", "movie"],
+  "types": ["series"],
   "idPrefixes": ["custom_"],
   "catalogs": [
     {
       "type": "series",
       "id": "custom_trending",
-      "name": "Angesagte Serien"
+      "name": "Beliebte Serien (Live)"
     },
     {
       "type": "series",
@@ -58,108 +67,140 @@ const manifest = {
 app.get('/manifest.json', (req, res) => res.json(manifest));
 
 // ==========================================
-// 2. Katalog Handler (Startseite & Suche)
+// 2. Katalog Scraper (Startseite & Beliebte Serien)
 // ==========================================
-function handleCatalog(req, res) {
+async function handleCatalog(req, res) {
   const { type, id, extra } = req.params;
+  console.log(`[Catalog Request] Type: ${type}, ID: ${id}`);
 
-  // Fall A: Suche
-  if (extra && extra.includes('search=')) {
-    const searchQuery = decodeURIComponent(extra.split('search=')[1].split('&')[0]);
+  try {
+    // 1. HTML der Serien-Übersicht abrufen
+    const response = await axios.get(`${BASE_URL}/beliebte-serien`, { headers: HTTP_HEADERS });
+    const $ = cheerio.load(response.data);
+    const metas = [];
 
-    return res.json({
-      metas: [
-        {
-          id: `custom_${searchQuery.toLowerCase().replace(/\s+/g, '_')}`,
-          type: type || "series",
-          name: searchQuery,
-          poster: "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=500&q=80",
-          posterShape: "poster",
-          description: `Suchergebnis für ${searchQuery}`
+    // 2. HTML-Elemente parsen (Serien-Karten durchsuchen)
+    $('.seriesListContainer div, .catalog .item, a[href^="/serie/"]').each((i, el) => {
+      const link = $(el).attr('href') \vert{}\vert{}$(el).find('a').attr('href');
+      const title = $(el).find('h3').text().trim() || $(el).attr('title') \vert{}\vert{}$(el).text().trim();
+      let poster = $(el).find('img').attr('data-src') \vert{}\vert{}$(el).find('img').attr('src');
+
+      if (link && link.startsWith('/serie/') && title && metas.length < 20) {
+        const seriesSlug = link.replace('/serie/stream/', '').replace('/serie/', '');
+        
+        if (poster && !poster.startsWith('http')) {
+          poster = `${BASE_URL}${poster}`;
         }
-      ]
-    });
-  }
 
-  // Fall B: Startseite (Angesagte Serien)
-  if (id === 'custom_trending' || (id && id.includes('trending'))) {
-    const trendingSeries = [
-      {
-        id: "custom_breaking_bad",
-        type: "series",
-        name: "Breaking Bad",
-        poster: "https://m.media-amazon.com/images/M/MVBmM2FlOWIxYjctYzA4MC00NWU5LWIyYTgtYTI2YmNhNjM0MWNhXkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg",
-        posterShape: "poster",
-        description: "Ein Chemielehrer wird zum Meth-Hersteller."
-      },
-      {
-        id: "custom_stranger_things",
-        type: "series",
-        name: "Stranger Things",
-        poster: "https://m.media-amazon.com/images/M/MVBMjE3MDg5OTgtYTE2NS00Y2NhLTg5NTItZmVhY2JhN2M5NTI2XkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg",
-        posterShape: "poster",
-        description: "Mysteriöse Vorfälle in einer Kleinstadt."
-      },
-      {
-        id: "custom_game_of_thrones",
-        type: "series",
-        name: "Game of Thrones",
-        poster: "https://m.media-amazon.com/images/M/MVBMDdmMTBiYTItYTAwXi00YjA4LTg3MDItZGQ3Nzg1ZGFmN2U0XkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg",
-        posterShape: "poster",
-        description: "Der Kampf um den Eisernen Thron."
+        // Duplikate vermeiden
+        if (!metas.some(m => m.id === `custom_${seriesSlug}`)) {
+          metas.push({
+            id: `custom_${seriesSlug}`,
+            type: "series",
+            name: title,
+            poster: poster || "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=500&q=80",
+            posterShape: "poster",
+            description: `Live gecrapt aus SerienStream: ${title}`
+          });
+        }
       }
-    ];
+    });
 
-    return res.json({ metas: trendingSeries });
+    return res.json({ metas });
+  } catch (error) {
+    console.error('[Catalog Error]', error.message);
+    // Fallback falls die Seite Blockaden / Timeout hat
+    return res.json({ metas: [] });
   }
-
-  res.json({ metas: [] });
 }
 
 app.get('/catalog/:type/:id.json', handleCatalog);
 app.get('/catalog/:type/:id/:extra.json', handleCatalog);
 
 // ==========================================
-// 3. Meta-Details
+// 3. Meta-Details Scraper (Staffeln & Folgen)
 // ==========================================
-app.get('/meta/:type/:id.json', (req, res) => {
-  const { type, id } = req.params;
-  const seriesName = id.replace('custom_', '').replace(/_/g, ' ');
+app.get('/meta/:type/:id.json', async (req, res) => {
+  const { id } = req.params;
+  const seriesSlug = id.replace('custom_', '');
+  console.log(`[Meta Request] Scrape Details für Slug: ${seriesSlug}`);
 
-  res.json({
-    meta: {
-      id: id,
-      type: type || "series",
-      name: seriesName.toUpperCase(),
-      poster: "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=500&q=80",
-      posterShape: "poster",
-      background: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1280&q=80",
-      description: `Detailansicht für ${seriesName}.`,
-      videos: [
-        { id: `${id}:1:1`, title: "S1:E1 - Episode 1", season: 1, episode: 1 },
-        { id: `${id}:1:2`, title: "S1:E2 - Episode 2", season: 1, episode: 2 }
-      ]
+  try {
+    const url = `${BASE_URL}/serie/stream/${seriesSlug}`;
+    const response = await axios.get(url, { headers: HTTP_HEADERS });
+    const $ = cheerio.load(response.data);
+
+    const title = $('h1').text().trim() || seriesSlug;
+    const description = $('.series-description').text().trim() || 'Keine Beschreibung verfügbar.';
+    let poster = $('.seriesCoverBox img').attr('data-src') \vert{}\vert{}$('.seriesCoverBox img').attr('src');
+
+    if (poster && !poster.startsWith('http')) {
+      poster = `${BASE_URL}${poster}`;
     }
-  });
+
+    // Staffeln & Episoden auslesen
+    const videos = [];
+    $('#stream ul li a').each((i, el) => {
+      const epTitle = $(el).text().trim();
+      const epHref = $(el).attr('href'); // z. B. /serie/stream/game-of-thrones/staffel-1/episode-1
+
+      if (epHref) {
+        videos.push({
+          id: `custom_${seriesSlug}:${epHref}`,
+          title: epTitle || `Episode ${i + 1}`,
+          season: 1,
+          episode: i + 1
+        });
+      }
+    });
+
+    return res.json({
+      meta: {
+        id,
+        type: "series",
+        name: title,
+        poster,
+        posterShape: "poster",
+        description,
+        videos: videos.length > 0 ? videos : [
+          { id: `${id}:staffel-1/episode-1`, title: "Staffel 1 Episode 1", season: 1, episode: 1 }
+        ]
+      }
+    });
+  } catch (error) {
+    console.error('[Meta Error]', error.message);
+    return res.json({
+      meta: {
+        id,
+        type: "series",
+        name: seriesSlug.toUpperCase(),
+        description: "Fehler beim Laden der Live-Metadaten.",
+        videos: []
+      }
+    });
+  }
 });
 
 // ==========================================
-// 4. Streams
+// 4. Stream Scraper (Video Hoster Links)
 // ==========================================
-app.get('/stream/:type/:id.json', (req, res) => {
-  const parts = req.params.id.split(':');
-  const season = parts[1] || '1';
-  const episode = parts[2] || '1';
+app.get('/stream/:type/:id.json', async (req, res) => {
+  const { id } = req.params;
+  console.log(`[Stream Request] ID: ${id}`);
 
+  // Dummy Fallback Stream für Testzwecke
   res.json({
     streams: [
       {
-        title: `BigBuckBunny Teststream (S${season} E${episode})`,
+        title: "Direct MP4 Stream",
         url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
       }
     ]
   });
 });
 
+// ==========================================
+// Server Start
+// ==========================================
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server läuft auf Port ${PORT}`));
+app.listen(PORT, () => console.log(`Scraper Server läuft auf Port ${PORT}`));
