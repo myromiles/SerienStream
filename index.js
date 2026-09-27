@@ -1,259 +1,82 @@
-const express = require('express');
-const cors = require('cors');
-const axios = require('axios');
-const cheerio = require('cheerio');
+const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 
-const app = express();
-app.use(cors());
-
-const BASE_URL = 'https://serienstream.to';
-const HTTP_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-  'Accept-Language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7'
-};
-
-// ==========================================
-// 0. Statusseite
-// ==========================================
-app.get('/', (req, res) => {
-  res.send(`<h1>🚀 mHub Scraper Server (v1.0.7) ist bereit!</h1><p>Manifest: <a href="/manifest.json">/manifest.json</a></p>`);
-});
-
-// ==========================================
-// 1. Manifest
-// ==========================================
+// 1. Manifest definieren
 const manifest = {
-  "id": "org.mhub.customaddon",
-  "version": "1.0.7",
-  "name": "SerienStream Live Addon",
-  "description": "Live Scraper für SerienStream",
-  "resources": ["catalog", "meta", "stream"],
-  "types": ["series"],
-  "idPrefixes": ["custom_"],
-  "catalogs": [
-    {
-      "type": "series",
-      "id": "custom_live_serien",
-      "name": "SerienStream - Beliebt (Live)"
-    }
-  ]
+    id: 'org.custom.seriesranking',
+    version: '1.0.0',
+    name: 'Serien Rangliste',
+    description: 'Zeigt die aktuelle Top-Serien-Rangliste in Stremio an.',
+    resources: ['catalog', 'meta'],
+    types: ['series'],
+    catalogs: [
+        {
+            type: 'series',
+            id: 'top_series_catalog',
+            name: 'Top Serien 2026'
+        }
+    ]
 };
 
-app.get('/manifest.json', (req, res) => res.json(manifest));
+// Statische Daten aus dem Scrape (oder dynamisch per Funktion abrufbar)
+const seriesList = [
+    { rank: 1, title: 'American Hostage', path: '/serie/american-hostage/staffel-1' },
+    { rank: 2, title: 'Trash-TV 2026', path: '/serie/trashtvwaskeinersehenwl/staffel-24' },
+    { rank: 3, title: 'Trophy Wife', path: '/serie/trophy-wife/staffel-1' },
+    { rank: 4, title: 'MobLand', path: '/serie/mobland/staffel-2' },
+    { rank: 5, title: 'Possession', path: '/serie/possession/staffel-1' },
+    { rank: 6, title: 'Outlander: Blood of My Blood', path: '/serie/outlander-blood-of-my-blood/staffel-2' },
+    { rank: 7, title: 'Youth', path: '/serie/youth/staffel-1' },
+    { rank: 8, title: 'American Horror Story', path: '/serie/american-horror-story-die-dunkle-seite-in-dir/staffel-13' },
+    { rank: 9, title: 'Trash-TV 2026 (S23)', path: '/serie/trashtvwaskeinersehenwl/staffel-23' },
+    { rank: 10, title: '4 Blocks Zero', path: '/serie/4-blocks-zero/staffel-1' },
+    { rank: 11, title: 'Brews Brothers', path: '/serie/brews-brothers/staffel-1' },
+    { rank: 12, title: 'The Real Housewives of NY', path: '/serie/the-real-housewives-of-new-york-city/staffel-16' },
+    { rank: 13, title: 'Eine andere Liebe als deine', path: '/serie/eine-andere-liebe-als-deine/staffel-1' },
+    { rank: 14, title: 'Toxic', path: '/serie/toxic/staffel-2' },
+    { rank: 15, title: 'Team No Limits', path: '/serie/team-no-limits-race-across-america/staffel-2' }
+];
 
-// ==========================================
-// 2. Katalog Scraper
-// ==========================================
-app.get('/catalog/:type/:id.json', async (req, res) => {
-  console.log(`[Catalog Request] Starte Live-Scraping von ${BASE_URL}/beliebte-serien`);
+const builder = new addonBuilder(manifest);
 
-  try {
-    const response = await axios.get(`${BASE_URL}/beliebte-serien`, { 
-      headers: HTTP_HEADERS,
-      timeout: 8000 
-    });
-
-    const $ = cheerio.load(response.data);
-    const metas = [];
-
-    $('a[href*="/serie/"]').each((i, el) => {
-      const link = $(el).attr('href');
-      const img = $(el).find('img');
-
-      const title = img.attr('alt') || $(el).attr('title') \vert{}\vert{}$(el).text().trim();
-      let poster = img.attr('data-src') || img.attr('src') || (img.attr('srcset') ? img.attr('srcset').split(' ')[0] : null);
-
-      if (link && title && poster && metas.length < 30) {
-        const slug = link.replace('/serie/stream/', '').replace('/serie/', '').replace(/^\//, '');
-
-        if (poster.startsWith('/')) {
-          poster = `${BASE_URL}${poster}`;
-        }
-
-        if (slug && !metas.some(m => m.id === `custom_${slug}`)) {
-          metas.push({
-            id: `custom_${slug}`,
-            type: "series",
-            name: title.trim(),
-            poster: poster.trim(),
-            posterShape: "poster",
-            description: `Live von SerienStream: ${title.trim()}`
-          });
-        }
-      }
-    });
-
-    console.log(`[Scraper Success] ${metas.length} Serien gefunden.`);
-
-    if (metas.length === 0) {
-      throw new Error("Keine Serien im HTML gefunden.");
-    }
-
-    return res.json({ metas });
-
-  } catch (error) {
-    console.error('[Scraper Fehler]:', error.message);
-
-    return res.json({
-      metas: [
-        {
-          id: "custom_error_card",
-          type: "series",
-          name: "⚠️ Scraping-Fehler",
-          poster: "https://via.placeholder.com/250x350/ff0000/ffffff?text=Blockiert",
-          posterShape: "poster",
-          description: `Grund: ${error.message}`
-        }
-      ]
-    });
-  }
-});
-
-app.get('/catalog/:type/:id/:extra.json', (req, res) => {
-  res.redirect(`/catalog/${req.params.type}/${req.params.id}.json`);
-});
-
-// ==========================================
-// 3. Meta-Details (mit .description-text & img.img-fluid)
-// ==========================================
-app.get('/meta/:type/:id.json', async (req, res) => {
-  const { id } = req.params;
-  const seriesSlug = id.replace('custom_', '');
-  const targetUrl = `${BASE_URL}/serie/stream/${seriesSlug}`;
-
-  console.log(`[Meta Request] Lade Details für: ${seriesSlug}`);
-
-  try {
-    const response = await axios.get(targetUrl, { headers: HTTP_HEADERS, timeout: 8000 });
-    const $ = cheerio.load(response.data);
-
-    const title = $('h1').text().trim() || seriesSlug.replace(/-/g, ' ').toUpperCase();
-    
-    // Selektoren aus deinem HTML-Ausschnitt
-    const description = $('.description-text').text().trim() \vert{}\vert{}$('.series-description p').text().trim() || 
-                        `Serie: ${title}`;
-
-    let poster = $('img.img-fluid').attr('data-src') \vert{}\vert{}$('img.img-fluid').attr('src');
-    if (poster && poster.startsWith('/')) {
-      poster = `${BASE_URL}${poster}`;
-    }
-
-    const videos = [];
-
-    // Staffeln
-    const seasons = [];
-    $('a[data-season-pill]').each((i, el) => {
-      const s = parseInt($(el).attr('data-season-pill'), 10);
-      if (!isNaN(s) && !seasons.includes(s)) {
-        seasons.push(s);
-      }
-    });
-
-    // Episoden
-    $('a[href*="/episode-"]').each((i, el) => {
-      const href = $(el).attr('href');
-      const match = href.match(/staffel-(\d+)\/episode-(\d+)/);
-      if (match) {
-        const season = parseInt(match[1], 10);
-        const episode = parseInt(match[2], 10);
-        const epTitle = $(el).attr('title') \vert{}\vert{}$(el).text().trim() || `Episode ${episode}`;
-        const epId = `${id}:${season}:${episode}`;
-
-        if (!videos.some(v => v.id === epId)) {
-          videos.push({
-            id: epId,
-            title: `S${season}E${episode} - ${epTitle}`,
-            season: season,
-            episode: episode
-          });
-        }
-      }
-    });
-
-    if (videos.length === 0 && seasons.length > 0) {
-      seasons.forEach(s => {
-        videos.push({
-          id: `${id}:${s}:1`,
-          title: `Staffel ${s} Folge 1`,
-          season: s,
-          episode: 1
+// 2. Katalog-Handler (Anzeige der Übersicht in Stremio)
+builder.defineCatalogHandler(async ({ type, id }) => {
+    if (type === 'series' && id === 'top_series_catalog') {
+        const metas = seriesList.map(item => {
+            // Eindeutige ID generieren
+            const slug = item.path.split('/')[2] || item.title.toLowerCase().replace(/\s+/g, '-');
+            
+            return {
+                id: `customseries:${slug}`,
+                type: 'series',
+                name: `#${item.rank} ${item.title}`,
+                poster: `https://via.placeholder.com/300x450/111827/FFFFFF?text=${encodeURIComponent(item.title)}`,
+                description: `Rang ${item.rank} in den aktuellen Serien-Charts.`
+            };
         });
-      });
+
+        return { metas };
     }
-
-    return res.json({
-      meta: {
-        id: id,
-        type: "series",
-        name: title,
-        poster: poster || "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=500&q=80",
-        posterShape: "poster",
-        description: description,
-        videos: videos.length > 0 ? videos : [{ id: `${id}:1:1`, title: "Staffel 1 Episode 1", season: 1, episode: 1 }]
-      }
-    });
-
-  } catch (error) {
-    console.error(`[Meta Fehler] ${seriesSlug}:`, error.message);
-    return res.json({
-      meta: {
-        id: id,
-        type: "series",
-        name: seriesSlug.replace(/-/g, ' ').toUpperCase(),
-        poster: "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=500&q=80",
-        posterShape: "poster",
-        description: `Live Serie: ${seriesSlug}`,
-        videos: [{ id: `${id}:1:1`, title: "Staffel 1 Episode 1", season: 1, episode: 1 }]
-      }
-    });
-  }
+    return { metas: [] };
 });
 
-// ==========================================
-// 4. Streams (Parst Verfügbare Hoster wie VOE)
-// ==========================================
-app.get('/stream/:type/:id.json', async (req, res) => {
-  const { id } = req.params; // Format: custom_slug:season:episode
-  const parts = id.split(':');
-
-  if (parts.length < 3) {
-    return res.json({ streams: [] });
-  }
-
-  const slug = parts[0].replace('custom_', '');
-  const season = parts[1];
-  const episode = parts[2];
-  const targetUrl = `${BASE_URL}/serie/stream/${slug}/staffel-${season}/episode-${episode}`;
-
-  try {
-    const response = await axios.get(targetUrl, { headers: HTTP_HEADERS, timeout: 8000 });
-    const $ = cheerio.load(response.data);
-    const streams = [];
-
-    // Hoster auslesen (z.B. VOE über img.watch-link)
-    $('img.watch-link').each((i, el) => {
-      const providerName = $(el).attr('title') \vert{}\vert{}$(el).attr('alt') || 'Hoster';
-      streams.push({
-        name: `SerienStream (${providerName})`,
-        title: `Öffne S${season}E${episode} auf ${providerName}`,
-        externalUrl: targetUrl
-      });
-    });
-
-    if (streams.length === 0) {
-      streams.push({
-        name: "SerienStream",
-        title: `Öffne S${season}E${episode} auf SerienStream`,
-        externalUrl: targetUrl
-      });
+// 3. Meta-Handler (Detailansicht einer Serie)
+builder.defineMetaHandler(async ({ type, id }) => {
+    if (type === 'series' && id.startsWith('customseries:')) {
+        const rawName = id.replace('customseries:', '').replace(/-/g, ' ');
+        
+        return {
+            meta: {
+                id: id,
+                type: 'series',
+                name: rawName.toUpperCase(),
+                poster: `https://via.placeholder.com/300x450/111827/FFFFFF?text=${encodeURIComponent(rawName)}`,
+                description: `Details für ${rawName}. Links können mit Cinemeta / IMDB gemappt werden.`
+            }
+        };
     }
-
-    return res.json({ streams });
-  } catch (error) {
-    return res.json({ streams: [] });
-  }
+    return { meta: null };
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server läuft auf Port ${PORT}`));
+// 4. HTTP-Server starten
+serveHTTP(builder.getInterface(), { port: 7000 });
+console.log('Stremio Addon läuft unter: http://127.0.0.1:7000/manifest.json');
