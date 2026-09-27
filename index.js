@@ -3,11 +3,11 @@ const cors = require('cors');
 
 const app = express();
 
-// CORS aktivieren (erforderlich für mHub im Browser)
+// CORS aktivieren, damit mHub aus dem Browser zugreifen kann
 app.use(cors());
 
 // ==========================================
-// 1. Manifest (Katalog für Startseite erweitert)
+// 1. Manifest (Startseite + Suche)
 // ==========================================
 const manifest = {
   "id": "org.mhub.customaddon",
@@ -37,32 +37,32 @@ app.get('/manifest.json', (req, res) => {
 });
 
 // ==========================================
-// 2. Katalog (Startseite & Suche)
+// 2. Katalog Handler (Startseite & Suche)
 // ==========================================
 function handleCatalog(req, res) {
   const { type, id, extra } = req.params;
 
-  // Fall 1: Suche
+  // Fall A: Die Suche wurde benutzt
   if (extra && extra.startsWith('search=')) {
     const searchQuery = decodeURIComponent(extra.split('=')[1]);
     console.log(`[mHub] Suche nach: "${searchQuery}"`);
 
     const mockResults = [
       {
-        id: `custom_${searchQuery.toLowerCase().replace(/\s+/g, '-')}`,
+        id: `custom_${searchQuery.toLowerCase().replace(/\s+/g, '_')}`,
         type: type || "series",
         name: `Ergebnis: ${searchQuery}`,
         poster: "https://via.placeholder.com/250x350.png?text=Poster",
-        description: "Beispiel-Beschreibung"
+        description: `Suchergebnis für: ${searchQuery}`
       }
     ];
 
     return res.json({ metas: mockResults });
   }
 
-  // Fall 2: Angesagte Serien auf der Startseite
+  // Fall B: "Angesagte Serien" direkt auf der Startseite
   if (id === 'custom_trending') {
-    console.log(`[mHub] Laden der Angesagten Serien für Startseite`);
+    console.log(`[mHub] Laden der Angesagten Serien für die Startseite`);
 
     const trendingSeries = [
       {
@@ -105,22 +105,23 @@ app.get('/meta/:type/:id.json', (req, res) => {
   const { type, id } = req.params;
   console.log(`[mHub] Meta-Details angefordert für ID: ${id}`);
 
+  // Serienname aus der ID formatieren
   const seriesName = id.replace('custom_', '').replace(/_/g, ' ');
 
   const videos = [
     {
       id: `${id}:1:1`,
-      title: "S1:E1 - Pilot",
+      title: "S1:E1 - Der Anfang",
       season: 1,
       episode: 1,
-      overview: "Die erste Episode."
+      overview: "Die erste Episode der Serie."
     },
     {
       id: `${id}:1:2`,
-      title: "S1:E2 - Folge 2",
+      title: "S1:E2 - Die Fortsetzung",
       season: 1,
       episode: 2,
-      overview: "Die zweite Episode."
+      overview: "Die zweite Episode der Serie."
     }
   ];
 
@@ -131,7 +132,7 @@ app.get('/meta/:type/:id.json', (req, res) => {
       name: seriesName.toUpperCase(),
       poster: "https://via.placeholder.com/250x350.png?text=Poster",
       background: "https://via.placeholder.com/1280x720.png?text=Hintergrund",
-      description: `Beschreibung für ${seriesName}.`,
+      description: `Beschreibung und Detailansicht für ${seriesName}.`,
       genres: ["Drama", "Action"],
       releaseInfo: "2024",
       videos: videos
@@ -140,11 +141,11 @@ app.get('/meta/:type/:id.json', (req, res) => {
 });
 
 // ==========================================
-// 4. Streams (Video-Links)
+// 4. Streams (Video-Links beim Abspielen)
 // ==========================================
 app.get('/stream/:type/:id.json', (req, res) => {
   const { type, id } = req.params;
-  console.log(`[mHub] Streams angefordert für Episode-ID: ${id}`);
+  console.log(`[mHub] Streams angefordert für Episode: ${id}`);
 
   const parts = id.split(':');
   const season = parts[1] || '1';
@@ -152,11 +153,11 @@ app.get('/stream/:type/:id.json', (req, res) => {
 
   const streams = [
     {
-      title: `1080p | Direct MP4 (Staffel ${season} Ep ${episode})`,
+      title: `1080p | MP4 Stream (Staffel ${season} Ep ${episode})`,
       url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
     },
     {
-      title: `720p | HLS Stream (.m3u8)`,
+      title: `720p | HLS Live Stream (.m3u8)`,
       url: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
     }
   ];
@@ -165,9 +166,11 @@ app.get('/stream/:type/:id.json', (req, res) => {
 });
 
 // ==========================================
-// Server starten
+// Server auf Port von Render (oder 3000) starten
 // ==========================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
+  console.log(`=================================`);
   console.log(`mHub Add-on Server läuft auf Port ${PORT}!`);
+  console.log(`=================================`);
 });
