@@ -1,0 +1,14 @@
+﻿{
+  "id": "browser-scraper-addon",
+  "name": "Vypn Browser Scraper",
+  "specVersion": 2,
+  "resources": ["catalog", "source"],
+  "types": ["video"],
+  "catalogs": [
+    {
+      "id": "all",
+      "name": "Live Gescrapte Inhalte",
+      "type": "video"
+    }
+  ]
+}

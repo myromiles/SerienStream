@@ -1,0 +1,18 @@
+﻿{
+  "task": {
+    "type": "http",
+    "method": "GET",
+    "url": "https://ziel-seite.com/neuheiten",
+    "headers": {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    },
+    "extract": {
+      "selector": ".movie-card",
+      "fields": {
+        "id": { "attribute": "data-id" },
+        "name": { "selector": ".title", "type": "text" },
+        "poster": { "selector": "img", "attribute": "src" }
+      }
+    }
+  }
+}
