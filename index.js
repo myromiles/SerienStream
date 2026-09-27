@@ -7,17 +7,22 @@ const app = express();
 app.use(cors());
 
 // ==========================================
-// 1. Manifest
+// 1. Manifest (Katalog für Startseite erweitert)
 // ==========================================
 const manifest = {
   "id": "org.mhub.customaddon",
   "version": "1.0.0",
   "name": "mHub Custom Addon",
-  "description": "Generisches mHub v2 Add-on Framework",
+  "description": "mHub v2 Add-on mit Angesagten Serien",
   "resources": ["catalog", "meta", "stream"],
   "types": ["series", "movie"],
   "idPrefixes": ["custom_"],
   "catalogs": [
+    {
+      "type": "series",
+      "id": "custom_trending",
+      "name": "Angesagte Serien"
+    },
     {
       "type": "series",
       "id": "custom_search",
@@ -32,11 +37,12 @@ app.get('/manifest.json', (req, res) => {
 });
 
 // ==========================================
-// 2. Katalog & Suche
+// 2. Katalog (Startseite & Suche)
 // ==========================================
 function handleCatalog(req, res) {
   const { type, id, extra } = req.params;
 
+  // Fall 1: Suche
   if (extra && extra.startsWith('search=')) {
     const searchQuery = decodeURIComponent(extra.split('=')[1]);
     console.log(`[mHub] Suche nach: "${searchQuery}"`);
@@ -54,6 +60,37 @@ function handleCatalog(req, res) {
     return res.json({ metas: mockResults });
   }
 
+  // Fall 2: Angesagte Serien auf der Startseite
+  if (id === 'custom_trending') {
+    console.log(`[mHub] Laden der Angesagten Serien für Startseite`);
+
+    const trendingSeries = [
+      {
+        id: "custom_breaking_bad",
+        type: "series",
+        name: "Breaking Bad",
+        poster: "https://image.tmdb.org/t/p/w500/ztSc2ma23O9P2L1Y2x4S5jQ1P5.jpg",
+        description: "Ein Chemielehrer wird zum Meth-Hersteller."
+      },
+      {
+        id: "custom_stranger_things",
+        type: "series",
+        name: "Stranger Things",
+        poster: "https://image.tmdb.org/t/p/w500/49WJfeN0moxb9IPfGn88q921Su.jpg",
+        description: "Mysteriöse Vorfälle in einer Kleinstadt."
+      },
+      {
+        id: "custom_game_of_thrones",
+        type: "series",
+        name: "Game of Thrones",
+        poster: "https://image.tmdb.org/t/p/w500/u3bZgnGQ9T01sWNhyve4z0wH08M.jpg",
+        description: "Der Kampf um den Eisernen Thron."
+      }
+    ];
+
+    return res.json({ metas: trendingSeries });
+  }
+
   res.json({ metas: [] });
 }
 
@@ -68,29 +105,22 @@ app.get('/meta/:type/:id.json', (req, res) => {
   const { type, id } = req.params;
   console.log(`[mHub] Meta-Details angefordert für ID: ${id}`);
 
-  const seriesName = id.replace('custom_', '');
+  const seriesName = id.replace('custom_', '').replace(/_/g, ' ');
 
   const videos = [
     {
       id: `${id}:1:1`,
-      title: "S1:E1 - Der Anfang",
+      title: "S1:E1 - Pilot",
       season: 1,
       episode: 1,
-      overview: "Die erste Episode der ersten Staffel."
+      overview: "Die erste Episode."
     },
     {
       id: `${id}:1:2`,
-      title: "S1:E2 - Das Abenteuer geht weiter",
+      title: "S1:E2 - Folge 2",
       season: 1,
       episode: 2,
-      overview: "Die zweite Episode der ersten Staffel."
-    },
-    {
-      id: `${id}:2:1`,
-      title: "S2:E1 - Rückkehr",
-      season: 2,
-      episode: 1,
-      overview: "Auftakt der zweiten Staffel."
+      overview: "Die zweite Episode."
     }
   ];
 
@@ -98,10 +128,10 @@ app.get('/meta/:type/:id.json', (req, res) => {
     meta: {
       id: id,
       type: type || "series",
-      name: `Serie: ${seriesName}`,
+      name: seriesName.toUpperCase(),
       poster: "https://via.placeholder.com/250x350.png?text=Poster",
       background: "https://via.placeholder.com/1280x720.png?text=Hintergrund",
-      description: `Detaillierte Beschreibung der ausgewählten Serie (${seriesName}).`,
+      description: `Beschreibung für ${seriesName}.`,
       genres: ["Drama", "Action"],
       releaseInfo: "2024",
       videos: videos
@@ -135,11 +165,9 @@ app.get('/stream/:type/:id.json', (req, res) => {
 });
 
 // ==========================================
-// Server starten (Dynamischer Port für Render)
+// Server starten
 // ==========================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`=================================`);
   console.log(`mHub Add-on Server läuft auf Port ${PORT}!`);
-  console.log(`=================================`);
 });
