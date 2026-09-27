@@ -43,7 +43,7 @@ const manifest = {
 app.get('/manifest.json', (req, res) => res.json(manifest));
 
 // ==========================================
-// 2. Live Scraper für das übergebene HTML-Format
+// 2. Live Scraper
 // ==========================================
 app.get('/catalog/:type/:id.json', async (req, res) => {
   console.log(`[Catalog Request] Starte Live-Scraping von ${BASE_URL}/beliebte-serien`);
@@ -62,22 +62,19 @@ app.get('/catalog/:type/:id.json', async (req, res) => {
       const link = $(el).attr('href');
       const img = $(el).find('img');
 
-      // Titel aus alt-Attribut oder Fallback holen
+      // Titel aus alt-Attribut oder Fallback holen (saubere Oder-Verknüpfung)
       const title = img.attr('alt') || $(el).attr('title') \vert{}\vert{}$(el).text().trim();
       
       // Bildpfad aus src oder srcset auslesen
       let poster = img.attr('src') || (img.attr('srcset') ? img.attr('srcset').split(' ')[0] : null);
 
       if (link && title && poster && metas.length < 30) {
-        // Slug säubern (z. B. /serie/stream/american-hostage -> american-hostage)
         const slug = link.replace('/serie/stream/', '').replace('/serie/', '').replace(/^\//, '');
 
-        // Relativen Pfad (/media/images/...) zur vollständigen URL zusammensetzen
         if (poster.startsWith('/')) {
           poster = `${BASE_URL}${poster}`;
         }
 
-        // Duplikate filtern
         if (slug && !metas.some(m => m.id === `custom_${slug}`)) {
           metas.push({
             id: `custom_${slug}`,
