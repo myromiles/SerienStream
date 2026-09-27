@@ -2,12 +2,10 @@ const express = require('express');
 const cors = require('cors');
 
 const app = express();
-
-// CORS aktivieren, damit mHub aus dem Browser zugreifen kann
 app.use(cors());
 
 // ==========================================
-// 0. Startseite / Statusseite
+// 0. Status-Startseite
 // ==========================================
 app.get('/', (req, res) => {
   res.send(`
@@ -22,8 +20,8 @@ app.get('/', (req, res) => {
       </head>
       <body>
         <div class="card">
-          <h1>🚀 mHub Add-on (v1.0.1) ist online!</h1>
-          <p>Füge folgende URL in deine mHub-App ein:</p>
+          <h1>🚀 mHub Add-on (v1.0.2) ist online!</h1>
+          <p>Manifest-URL für Stremio / mHub:</p>
           <p><a href="/manifest.json" target="_blank">https://mhub-addon.onrender.com/manifest.json</a></p>
         </div>
       </body>
@@ -32,11 +30,11 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// 1. Manifest (Version auf 1.0.1 erhöht)
+// 1. Manifest
 // ==========================================
 const manifest = {
   "id": "org.mhub.customaddon",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "name": "mHub Custom Addon",
   "description": "mHub v2 Add-on mit Angesagten Serien",
   "resources": ["catalog", "meta", "stream"],
@@ -57,59 +55,57 @@ const manifest = {
   ]
 };
 
-app.get('/manifest.json', (req, res) => {
-  res.json(manifest);
-});
+app.get('/manifest.json', (req, res) => res.json(manifest));
 
 // ==========================================
 // 2. Katalog Handler (Startseite & Suche)
 // ==========================================
 function handleCatalog(req, res) {
   const { type, id, extra } = req.params;
-  console.log(`[mHub Catalog] Anforderung -> type: ${type}, id: ${id}, extra: ${extra}`);
 
   // Fall A: Suche
   if (extra && extra.includes('search=')) {
     const searchQuery = decodeURIComponent(extra.split('search=')[1].split('&')[0]);
-    console.log(`[mHub] Suche nach: "${searchQuery}"`);
 
-    const mockResults = [
-      {
-        id: `custom_${searchQuery.toLowerCase().replace(/\s+/g, '_')}`,
-        type: type || "series",
-        name: `Ergebnis: ${searchQuery}`,
-        poster: "https://via.placeholder.com/250x350.png?text=Poster",
-        description: `Suchergebnis für: ${searchQuery}`
-      }
-    ];
-
-    return res.json({ metas: mockResults });
+    return res.json({
+      metas: [
+        {
+          id: `custom_${searchQuery.toLowerCase().replace(/\s+/g, '_')}`,
+          type: type || "series",
+          name: searchQuery,
+          poster: "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=500&q=80",
+          posterShape: "poster",
+          description: `Suchergebnis für ${searchQuery}`
+        }
+      ]
+    });
   }
 
-  // Fall B: "Angesagte Serien" auf der Startseite
+  // Fall B: Startseite (Angesagte Serien)
   if (id === 'custom_trending' || (id && id.includes('trending'))) {
-    console.log(`[mHub] Sende Angesagte Serien an mHub...`);
-
     const trendingSeries = [
       {
         id: "custom_breaking_bad",
         type: "series",
         name: "Breaking Bad",
-        poster: "https://image.tmdb.org/t/p/w500/ztSc2ma23O9P2L1Y2x4S5jQ1P5.jpg",
+        poster: "https://m.media-amazon.com/images/M/MVBmM2FlOWIxYjctYzA4MC00NWU5LWIyYTgtYTI2YmNhNjM0MWNhXkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg",
+        posterShape: "poster",
         description: "Ein Chemielehrer wird zum Meth-Hersteller."
       },
       {
         id: "custom_stranger_things",
         type: "series",
         name: "Stranger Things",
-        poster: "https://image.tmdb.org/t/p/w500/49WJfeN0moxb9IPfGn88q921Su.jpg",
+        poster: "https://m.media-amazon.com/images/M/MVBMjE3MDg5OTgtYTE2NS00Y2NhLTg5NTItZmVhY2JhN2M5NTI2XkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg",
+        posterShape: "poster",
         description: "Mysteriöse Vorfälle in einer Kleinstadt."
       },
       {
         id: "custom_game_of_thrones",
         type: "series",
         name: "Game of Thrones",
-        poster: "https://image.tmdb.org/t/p/w500/u3bZgnGQ9T01sWNhyve4z0wH08M.jpg",
+        poster: "https://m.media-amazon.com/images/M/MVBMDdmMTBiYTItYTAwXi00YjA4LTg3MDItZGQ3Nzg1ZGFmN2U0XkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg",
+        posterShape: "poster",
         description: "Der Kampf um den Eisernen Thron."
       }
     ];
@@ -120,82 +116,50 @@ function handleCatalog(req, res) {
   res.json({ metas: [] });
 }
 
-// Flexible Routen für Express 5
 app.get('/catalog/:type/:id.json', handleCatalog);
 app.get('/catalog/:type/:id/:extra.json', handleCatalog);
 
 // ==========================================
-// 3. Meta-Details (Staffeln & Episoden)
+// 3. Meta-Details
 // ==========================================
 app.get('/meta/:type/:id.json', (req, res) => {
   const { type, id } = req.params;
-  console.log(`[mHub] Meta-Details angefordert für ID: ${id}`);
-
   const seriesName = id.replace('custom_', '').replace(/_/g, ' ');
-
-  const videos = [
-    {
-      id: `${id}:1:1`,
-      title: "S1:E1 - Der Anfang",
-      season: 1,
-      episode: 1,
-      overview: "Die erste Episode der Serie."
-    },
-    {
-      id: `${id}:1:2`,
-      title: "S1:E2 - Die Fortsetzung",
-      season: 1,
-      episode: 2,
-      overview: "Die zweite Episode der Serie."
-    }
-  ];
 
   res.json({
     meta: {
       id: id,
       type: type || "series",
       name: seriesName.toUpperCase(),
-      poster: "https://via.placeholder.com/250x350.png?text=Poster",
-      background: "https://via.placeholder.com/1280x720.png?text=Hintergrund",
-      description: `Beschreibung und Detailansicht für ${seriesName}.`,
-      genres: ["Drama", "Action"],
-      releaseInfo: "2024",
-      videos: videos
+      poster: "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=500&q=80",
+      posterShape: "poster",
+      background: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1280&q=80",
+      description: `Detailansicht für ${seriesName}.`,
+      videos: [
+        { id: `${id}:1:1`, title: "S1:E1 - Episode 1", season: 1, episode: 1 },
+        { id: `${id}:1:2`, title: "S1:E2 - Episode 2", season: 1, episode: 2 }
+      ]
     }
   });
 });
 
 // ==========================================
-// 4. Streams (Video-Links)
+// 4. Streams
 // ==========================================
 app.get('/stream/:type/:id.json', (req, res) => {
-  const { type, id } = req.params;
-  console.log(`[mHub] Streams angefordert für Episode: ${id}`);
-
-  const parts = id.split(':');
+  const parts = req.params.id.split(':');
   const season = parts[1] || '1';
   const episode = parts[2] || '1';
 
-  const streams = [
-    {
-      title: `1080p | MP4 Stream (Staffel ${season} Ep ${episode})`,
-      url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-    },
-    {
-      title: `720p | HLS Live Stream (.m3u8)`,
-      url: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
-    }
-  ];
-
-  res.json({ streams: streams });
+  res.json({
+    streams: [
+      {
+        title: `BigBuckBunny Teststream (S${season} E${episode})`,
+        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+      }
+    ]
+  });
 });
 
-// ==========================================
-// Server starten
-// ==========================================
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`=================================`);
-  console.log(`mHub Add-on Server läuft auf Port ${PORT}!`);
-  console.log(`=================================`);
-});
+app.listen(PORT, () => console.log(`Server läuft auf Port ${PORT}`));
