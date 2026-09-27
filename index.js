@@ -22,7 +22,7 @@ app.get('/', (req, res) => {
       </head>
       <body>
         <div class="card">
-          <h1>🚀 mHub Add-on ist online!</h1>
+          <h1>🚀 mHub Add-on (v1.0.1) ist online!</h1>
           <p>Füge folgende URL in deine mHub-App ein:</p>
           <p><a href="/manifest.json" target="_blank">https://mhub-addon.onrender.com/manifest.json</a></p>
         </div>
@@ -32,11 +32,11 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// 1. Manifest (Startseite + Suche)
+// 1. Manifest (Version auf 1.0.1 erhöht)
 // ==========================================
 const manifest = {
   "id": "org.mhub.customaddon",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "mHub Custom Addon",
   "description": "mHub v2 Add-on mit Angesagten Serien",
   "resources": ["catalog", "meta", "stream"],
@@ -66,10 +66,11 @@ app.get('/manifest.json', (req, res) => {
 // ==========================================
 function handleCatalog(req, res) {
   const { type, id, extra } = req.params;
+  console.log(`[mHub Catalog] Anforderung -> type: ${type}, id: ${id}, extra: ${extra}`);
 
   // Fall A: Suche
-  if (extra && extra.startsWith('search=')) {
-    const searchQuery = decodeURIComponent(extra.split('=')[1]);
+  if (extra && extra.includes('search=')) {
+    const searchQuery = decodeURIComponent(extra.split('search=')[1].split('&')[0]);
     console.log(`[mHub] Suche nach: "${searchQuery}"`);
 
     const mockResults = [
@@ -86,8 +87,8 @@ function handleCatalog(req, res) {
   }
 
   // Fall B: "Angesagte Serien" auf der Startseite
-  if (id === 'custom_trending') {
-    console.log(`[mHub] Laden der Angesagten Serien für die Startseite`);
+  if (id === 'custom_trending' || (id && id.includes('trending'))) {
+    console.log(`[mHub] Sende Angesagte Serien an mHub...`);
 
     const trendingSeries = [
       {
@@ -119,7 +120,7 @@ function handleCatalog(req, res) {
   res.json({ metas: [] });
 }
 
-// Getrennte Routen für Express 5 Kompatibilität
+// Flexible Routen für Express 5
 app.get('/catalog/:type/:id.json', handleCatalog);
 app.get('/catalog/:type/:id/:extra.json', handleCatalog);
 
@@ -190,7 +191,7 @@ app.get('/stream/:type/:id.json', (req, res) => {
 });
 
 // ==========================================
-// Server auf Port von Render (oder 3000) starten
+// Server starten
 // ==========================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
