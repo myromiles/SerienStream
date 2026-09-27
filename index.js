@@ -1,6 +1,6 @@
 const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 
-// 1. Manifest definieren
+// Manifest: Nur Katalog und Meta definiert (kein 'stream')
 const manifest = {
     id: 'org.custom.seriesranking',
     version: '1.0.0',
@@ -17,7 +17,6 @@ const manifest = {
     ]
 };
 
-// Statische Daten aus dem Scrape (oder dynamisch per Funktion abrufbar)
 const seriesList = [
     { rank: 1, title: 'American Hostage', path: '/serie/american-hostage/staffel-1' },
     { rank: 2, title: 'Trash-TV 2026', path: '/serie/trashtvwaskeinersehenwl/staffel-24' },
@@ -38,18 +37,16 @@ const seriesList = [
 
 const builder = new addonBuilder(manifest);
 
-// 2. Katalog-Handler (Anzeige der Übersicht in Stremio)
+// Katalog-Handler ohne Poster-URLs
 builder.defineCatalogHandler(async ({ type, id }) => {
     if (type === 'series' && id === 'top_series_catalog') {
         const metas = seriesList.map(item => {
-            // Eindeutige ID generieren
             const slug = item.path.split('/')[2] || item.title.toLowerCase().replace(/\s+/g, '-');
             
             return {
                 id: `customseries:${slug}`,
                 type: 'series',
                 name: `#${item.rank} ${item.title}`,
-                poster: `https://via.placeholder.com/300x450/111827/FFFFFF?text=${encodeURIComponent(item.title)}`,
                 description: `Rang ${item.rank} in den aktuellen Serien-Charts.`
             };
         });
@@ -59,7 +56,7 @@ builder.defineCatalogHandler(async ({ type, id }) => {
     return { metas: [] };
 });
 
-// 3. Meta-Handler (Detailansicht einer Serie)
+// Meta-Handler für Details
 builder.defineMetaHandler(async ({ type, id }) => {
     if (type === 'series' && id.startsWith('customseries:')) {
         const rawName = id.replace('customseries:', '').replace(/-/g, ' ');
@@ -69,14 +66,13 @@ builder.defineMetaHandler(async ({ type, id }) => {
                 id: id,
                 type: 'series',
                 name: rawName.toUpperCase(),
-                poster: `https://via.placeholder.com/300x450/111827/FFFFFF?text=${encodeURIComponent(rawName)}`,
-                description: `Details für ${rawName}. Links können mit Cinemeta / IMDB gemappt werden.`
+                description: `Details für ${rawName}.`
             }
         };
     }
     return { meta: null };
 });
 
-// 4. HTTP-Server starten
-serveHTTP(builder.getInterface(), { port: 7000 });
-console.log('Stremio Addon läuft unter: http://127.0.0.1:7000/manifest.json');
+// Nutzt den dynamischen Port von Render oder Fallback auf 7000
+const port = process.env.PORT || 7000;
+serveHTTP(builder.getInterface(), { port });
